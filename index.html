@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AtCoder ステップアップ支援</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>AtCoder ステップアップ支援</h1>
+    </div>
+    <p class="tagline">灰 → 茶 → 緑 → 水 を、問題選びと「発想」の両輪で。</p>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-tab="start">はじめに</button>
+    <button class="tab" data-tab="diagnose">診断</button>
+    <button class="tab" data-tab="recommend">問題</button>
+    <button class="tab" data-tab="ideas">発想</button>
+    <button class="tab" data-tab="roadmap">ロードマップ</button>
+    <button class="tab" data-tab="settings">設定</button>
+  </nav>
+
+  <main>
+    <!-- はじめに -->
+    <section class="panel is-active" id="panel-start">
+      <div class="panel-head">
+        <h2>はじめに — 何から始める？</h2>
+        <p class="muted">AtCoder が完全に手つかずでも大丈夫。上から順にこなせば、ちゃんとスタートが切れます。</p>
+      </div>
+
+      <h3>最初のステップ</h3>
+      <p class="muted small">チェックは自動保存されます。</p>
+      <div id="start-steps" class="start-steps"></div>
+
+      <h3>言語の選び方</h3>
+      <div id="start-langs" class="cards"></div>
+
+      <h3>よくある疑問</h3>
+      <div id="start-faq" class="cat-grid"></div>
+
+      <div id="start-cta" class="start-cta"></div>
+    </section>
+
+    <!-- 診断 -->
+    <section class="panel" id="panel-diagnose">
+      <div class="panel-head">
+        <h2>現在地の診断</h2>
+        <p class="muted">AtCoder のユーザー名から、AC した問題の難易度分布と現在の色・目標を出します。</p>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span>AtCoder ユーザー名</span>
+          <input type="text" id="diag-user" placeholder="例: chokudai" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>現在のレーティング（任意）</span>
+          <input type="number" id="diag-rating" placeholder="分かれば入力" />
+        </label>
+        <button class="btn primary" id="diag-run">診断する</button>
+      </div>
+
+      <div id="diag-status" class="status" hidden></div>
+      <div id="diag-result" hidden>
+        <div class="cards" id="diag-summary"></div>
+        <h3>解いた問題の難易度分布</h3>
+        <div class="dist" id="diag-dist"></div>
+        <p class="muted small" id="diag-note"></p>
+        <div id="diag-cta" class="diag-cta"></div>
+      </div>
+
+      <hr />
+      <h3>到達レート目安</h3>
+      <p class="muted small">「この難易度を安定して解ける」と感じたら、内部レートはどの辺りか の目安を数値で出します（ユーザー名不要）。</p>
+      <div class="row">
+        <label class="field">
+          <span>安定して解ける難易度</span>
+          <input type="number" id="est-diff" placeholder="例: 800" />
+        </label>
+        <label class="field">
+          <span>解ける度合い</span>
+          <select id="est-prob">
+            <option value="0.9" selected>ほぼ確実（90%）</option>
+            <option value="0.75">よく解ける（75%）</option>
+            <option value="0.5">半々（50%）</option>
+          </select>
+        </label>
+        <button class="btn primary" id="est-run">目安を出す</button>
+      </div>
+      <div class="chips" id="est-presets">
+        <button class="chip" data-d="400">ABC-C 相当 (400)</button>
+        <button class="chip" data-d="800">ABC-D 相当 (800)</button>
+        <button class="chip" data-d="1200">ABC-E 相当 (1200)</button>
+        <button class="chip" data-d="1600">ABC-F 相当 (1600)</button>
+      </div>
+      <div id="est-result"></div>
+    </section>
+
+    <!-- 問題リコメンド -->
+    <section class="panel" id="panel-recommend">
+      <div class="panel-head">
+        <h2>問題リコメンド</h2>
+        <p class="muted">今の実力の少し上から、まだ AC していない問題を厳選します。<button class="linkbtn" id="rec-godiag">診断で現在地を見る →</button></p>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span>目標の色</span>
+          <select id="rec-target">
+            <option value="brown">茶を目指す（灰→茶）</option>
+            <option value="green">緑を目指す（茶→緑）</option>
+            <option value="cyan">水を目指す（緑→水）</option>
+            <option value="blue">青を目指す（水→青）</option>
+          </select>
+        </label>
+        <label class="field check">
+          <input type="checkbox" id="rec-abc" checked />
+          <span>ABC の問題に絞る</span>
+        </label>
+        <label class="field check">
+          <input type="checkbox" id="rec-harder" />
+          <span>やや高難度も混ぜる</span>
+        </label>
+        <label class="field">
+          <span>表示数</span>
+          <select id="rec-count">
+            <option>10</option>
+            <option selected>20</option>
+            <option>40</option>
+          </select>
+        </label>
+        <button class="btn primary" id="rec-run">問題を出す</button>
+      </div>
+
+      <div id="rec-status" class="status" hidden></div>
+      <div id="rec-list" class="problem-list"></div>
+    </section>
+
+    <!-- 発想補助 -->
+    <section class="panel" id="panel-ideas">
+      <div class="panel-head">
+        <h2>発想補助</h2>
+        <p class="muted">解法を当てる「引き出し」を鍛えます。まず手順、次にカテゴリ別ヒント、詰まったら AI ヒント。</p>
+      </div>
+
+      <h3>発想の3ステップ（どんな問題でも）</h3>
+      <ol class="framework" id="framework"></ol>
+
+      <h3>解法カテゴリ別ヒント</h3>
+      <p class="muted small">「こういう時はこれ」を段階的に。クリックで開きます。</p>
+      <div class="cat-grid" id="cat-grid"></div>
+
+      <h3>AI ヒント（問題文を貼って段階ヒントを生成）</h3>
+      <div class="ai-box">
+        <div class="row">
+          <label class="field grow">
+            <span>問題タイトル / URL（任意）</span>
+            <input type="text" id="ai-title" placeholder="例: ABC123 D - ..." />
+          </label>
+          <label class="field">
+            <span>推定難易度（任意）</span>
+            <input type="number" id="ai-diff" placeholder="例: 800" />
+          </label>
+        </div>
+        <label class="field">
+          <span>問題文（制約・求めるもの含めて貼り付け）</span>
+          <textarea id="ai-statement" rows="7" placeholder="ここに問題文を貼り付け。制約（N の上限など）と「何を求めるか」が入っていると精度が上がります。"></textarea>
+        </label>
+        <div class="row">
+          <button class="btn primary" id="ai-run">段階ヒントを生成</button>
+          <span class="muted small" id="ai-modelinfo"></span>
+        </div>
+        <div id="ai-status" class="status" hidden></div>
+        <div id="ai-result" class="ai-result"></div>
+      </div>
+    </section>
+
+    <!-- ロードマップ -->
+    <section class="panel" id="panel-roadmap">
+      <div class="panel-head">
+        <h2>色別ロードマップ</h2>
+        <p class="muted">次の色までに身につけたい手筋。チェックは自動保存されます。</p>
+      </div>
+      <div id="roadmap" class="roadmap"></div>
+    </section>
+
+    <!-- 設定 -->
+    <section class="panel" id="panel-settings">
+      <div class="panel-head">
+        <h2>設定</h2>
+        <p class="muted">ユーザー名・API キーはこのブラウザ（localStorage）にのみ保存されます。</p>
+      </div>
+
+      <label class="field">
+        <span>AtCoder ユーザー名</span>
+        <input type="text" id="set-user" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>現在のレーティング（任意）</span>
+        <input type="number" id="set-rating" />
+      </label>
+
+      <hr />
+
+      <h3>AI ヒント設定</h3>
+      <label class="field">
+        <span>Anthropic API キー（sk-ant-...）</span>
+        <input type="password" id="set-apikey" placeholder="AI ヒントを使う場合のみ" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>モデル</span>
+        <select id="set-model"></select>
+      </label>
+      <p class="muted small">
+        キーはサーバーに送られず、ブラウザに保存され、Anthropic API へ直接送信されます。
+        共有 PC では使用後に「キーを消去」してください。
+      </p>
+
+      <div class="row">
+        <button class="btn primary" id="set-save">保存</button>
+        <button class="btn" id="set-clearkey">キーを消去</button>
+        <span class="muted small" id="set-saved"></span>
+      </div>
+
+      <hr />
+      <h3>データ</h3>
+      <p class="muted small">問題データは AtCoder Problems (kenkoooo) から取得します。</p>
+      <button class="btn" id="set-refresh">問題データを再取得</button>
+      <span class="muted small" id="set-datainfo"></span>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <span>データ提供: <a href="https://kenkoooo.com/atcoder/" target="_blank" rel="noopener">AtCoder Problems</a></span>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
