@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AtCoder ステップアップ支援</title>
   <link rel="stylesheet" href="css/styles.css" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#3b5bdb" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="AtCoder Step" />
 </head>
 <body>
   <header class="app-header">
@@ -239,5 +248,13 @@
   </footer>
 
   <script type="module" src="js/app.js"></script>
+  <script>
+    // PWA: Service Worker 登録（https / localhost でのみ有効）
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
 </body>
 </html>
