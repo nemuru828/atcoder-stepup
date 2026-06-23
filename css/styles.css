@@ -257,7 +257,55 @@ hr { border: none; border-top: 1px solid var(--line); margin: 22px 0; }
   color: var(--ink-soft); font-size: .82rem;
 }
 
+/* ダークモード */
+body.dark {
+  --bg: #0f1420; --surface: #161d2b; --ink: #e7eaf1; --ink-soft: #9aa6bd;
+  --line: #28324a; --accent: #6b8afd; --accent-soft: #1b2742;
+  --c-gray: #9aa0a6;
+}
+body.dark .badge { text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+
+/* 問題アクション（リコメンド/お気に入り/模擬ABC 共通） */
+.problem .pact { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.problem .iconbtn { border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); border-radius: 8px; padding: 5px 9px; cursor: pointer; font-size: .8rem; white-space: nowrap; }
+.problem .iconbtn:hover { border-color: var(--accent); color: var(--accent); }
+.problem .iconbtn.fav.on { color: #f59f00; border-color: #f59f00; }
+
+/* AC率テーブル */
+.ar-row { display: grid; grid-template-columns: 60px 1fr 120px; align-items: center; gap: 10px; margin: 6px 0; }
+.ar-row .lbl { font-size: .85rem; font-weight: 600; }
+.ar-bar { height: 16px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.ar-bar > span { display: block; height: 100%; border-radius: 6px; }
+.ar-row .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); font-size: .82rem; }
+
+/* 復習フォーム */
+.review-form { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; }
+.catchecks { display: flex; flex-wrap: wrap; gap: 8px; }
+.catchecks label { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: .85rem; cursor: pointer; color: var(--ink); }
+.catchecks label:hover { border-color: var(--accent); }
+
+/* 弱点マップ */
+.weak-row { display: grid; grid-template-columns: 130px 1fr 40px; align-items: center; gap: 10px; margin: 6px 0; }
+.weak-bar { height: 16px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.weak-bar > span { display: block; height: 100%; background: var(--warn); border-radius: 6px; }
+.weak-row .wn { text-align: right; color: var(--ink-soft); font-size: .85rem; }
+.weak-row a.wname { color: var(--accent); text-decoration: none; font-size: .88rem; font-weight: 600; }
+.weak-row a.wname:hover { text-decoration: underline; }
+
+/* 復習/ログ アイテム */
+.rv-item { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; box-shadow: var(--shadow); margin: 6px 0; }
+.rv-item .rv-main { flex: 1; }
+.rv-item .rv-meta { color: var(--ink-soft); font-size: .8rem; margin-top: 2px; }
+.rv-tag { display: inline-block; font-size: .72rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; margin: 3px 4px 0 0; color: var(--ink-soft); }
+
+/* 模擬ABC タイマー */
+.mock-timer { font-variant-numeric: tabular-nums; font-size: 1.4rem; font-weight: 800; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); align-self: center; }
+.mock-timer.run { color: var(--ok); border-color: var(--ok); }
+.mock-timer.over { color: var(--warn); border-color: var(--warn); }
+
 @media (max-width: 560px) {
   .app-header, .tabs, main, .app-footer { padding-left: 14px; padding-right: 14px; }
   .dist-row { grid-template-columns: 52px 1fr 44px; }
+  .ar-row { grid-template-columns: 48px 1fr 104px; }
+  .weak-row { grid-template-columns: 110px 1fr 34px; }
 }

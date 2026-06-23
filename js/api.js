@@ -35,25 +35,31 @@ export function isLoaded() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ユーザーの提出履歴をページングで全取得し、AC した問題 ID の集合を返す。
-// v3 API は 1 ページ最大 500 件。onProgress(count) で進捗通知。
-export async function fetchAcceptedSet(user, onProgress) {
-  const ac = new Set();
+// ユーザーの提出履歴をページングで全取得し、集計を返す。
+// v3 API は 1 ページ最大 500 件。onProgress(acCount, attemptedCount) で進捗通知。
+// 戻り値: { acSet:Set<pid>, attempted:Set<pid>, firstAc:Map<pid, epochSec> }
+export async function fetchUserData(user, onProgress) {
+  const acSet = new Set();
+  const attempted = new Set();
+  const firstAc = new Map();
   let fromSecond = 0;
-  let total = 0;
   // 安全のため最大ページ数を制限（500*400 = 20万提出まで）。
   for (let page = 0; page < 400; page++) {
     const subs = await getJson(API.submissions(user, fromSecond));
     if (!Array.isArray(subs) || subs.length === 0) break;
     for (const s of subs) {
-      total++;
-      if (s.result === 'AC') ac.add(s.problem_id);
+      attempted.add(s.problem_id);
+      if (s.result === 'AC') {
+        acSet.add(s.problem_id);
+        const prev = firstAc.get(s.problem_id);
+        if (prev === undefined || s.epoch_second < prev) firstAc.set(s.problem_id, s.epoch_second);
+      }
     }
-    if (onProgress) onProgress(ac.size, total);
+    if (onProgress) onProgress(acSet.size, attempted.size);
     if (subs.length < 500) break;
     // 次ページは最後の提出の epoch_second から。
     fromSecond = subs[subs.length - 1].epoch_second + 1;
     await sleep(300); // API への配慮
   }
-  return ac;
+  return { acSet, attempted, firstAc };
 }

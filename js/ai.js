@@ -93,3 +93,58 @@ export async function generateHints({ apiKey, model, title, difficulty, statemen
 
   return parseStages(text);
 }
+
+// 共通: Claude 呼び出し（テキスト応答）。
+async function callClaude({ apiKey, model, system, user, maxTokens = 1600 }) {
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: model || DEFAULT_MODEL,
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: 'user', content: user }],
+      }),
+    });
+  } catch {
+    throw new Error('通信に失敗しました。ネットワークを確認してください。');
+  }
+  if (!res.ok) {
+    let detail = '';
+    try { detail = (await res.json())?.error?.message || ''; } catch { /* ignore */ }
+    if (res.status === 401) throw new Error('API キーが無効です（401）。設定を確認してください。');
+    if (res.status === 429) throw new Error('レート制限に達しました（429）。少し待って再試行してください。');
+    throw new Error(`API エラー (${res.status}) ${detail}`);
+  }
+  const data = await res.json();
+  if (data.stop_reason === 'refusal') throw new Error('この内容には応答できませんでした。');
+  const text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+  if (!text) throw new Error('応答が空でした。もう一度お試しください。');
+  return text;
+}
+
+// 学習プラン生成。weakness: [{name, count}]
+export async function generateStudyPlan({ apiKey, model, currentColor, targetColor, weakness, note }) {
+  if (!apiKey) throw new Error('API キーが設定されていません。設定タブで入力してください。');
+  const system = `あなたは AtCoder の学習コーチです。学習者の現状（現在の色・目標の色・つまずいているカテゴリ）を踏まえ、今週〜2週間で実行できる具体的な学習プランを日本語で提案します。
+- 優先的に強化すべきカテゴリ、1日あたりの問題数、取り組む難易度帯、復習の回し方を含める。
+- 簡潔で実行可能に。見出しと箇条書きで。
+- 最後に「今日まず1つやること」を1行で。`;
+  const lines = [];
+  lines.push(`現在の色: ${currentColor || '不明'}`);
+  lines.push(`目標の色: ${targetColor || '不明'}`);
+  if (weakness && weakness.length) {
+    lines.push(`つまずきやすいカテゴリ（多い順）: ${weakness.map((w) => `${w.name}(${w.count}回)`).join('、')}`);
+  } else {
+    lines.push('つまずき記録: まだなし（基礎カテゴリから順に）');
+  }
+  if (note) lines.push(`補足: ${note}`);
+  return callClaude({ apiKey, model, system, user: lines.join('\n'), maxTokens: 1600 });
+}

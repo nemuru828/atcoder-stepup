@@ -6,7 +6,8 @@ import * as api from './api.js';
 import { diagnose, bandKeyFromRating, targetFromCurrent } from './diagnose.js';
 import { recommend, windowOf } from './recommend.js';
 import { displayDifficulty } from './colors.js';
-import { generateHints } from './ai.js';
+import { generateHints, generateStudyPlan } from './ai.js';
+import { acRateByBand, estimateRating, stableBandKey, activity } from './stats.js';
 import { ROADMAP } from './data/roadmap.js';
 import { FRAMEWORK, CATEGORIES } from './data/categories.js';
 import { GET_STARTED } from './data/getstarted.js';
@@ -43,6 +44,8 @@ const state = {
   settings: { user: '', rating: '', apiKey: '', model: DEFAULT_MODEL },
   acSet: null,
   acUser: null,
+  userData: null,   // { acSet, attempted, firstAc }
+  lastDiag: null,   // { currentKey, targetKey }
 };
 
 // ---- タブ ----
@@ -66,14 +69,14 @@ async function ensureData() {
   setStatus('#diag-status', '問題データを取得中…（初回は数 MB）');
   await Promise.all([api.fetchProblems(), api.fetchModels()]);
 }
-async function ensureAccepted(user, statusId) {
-  if (state.acSet && state.acUser === user) return state.acSet;
+async function ensureUserData(user, statusId) {
+  if (state.userData && state.acUser === user) return state.userData;
   setStatus(statusId, `${user} の提出を取得中…`);
-  const ac = await api.fetchAcceptedSet(user, (acCount) => {
-    setStatus(statusId, `${user} の提出を取得中…（AC ${acCount} 問）`);
+  const data = await api.fetchUserData(user, (ac, att) => {
+    setStatus(statusId, `${user} の提出を取得中…（AC ${ac} / 挑戦 ${att}）`);
   });
-  state.acSet = ac; state.acUser = user;
-  return ac;
+  state.userData = data; state.acSet = data.acSet; state.acUser = user;
+  return data;
 }
 
 // ---- 設定 ----
@@ -92,6 +95,15 @@ function initSettings() {
   updateAiModelInfo();
   updateDataInfo();
 
+  // ダークモード
+  const ui = load(KEYS.ui, {}) || {};
+  $('#set-dark').checked = !!ui.dark;
+  applyDark(ui.dark);
+  $('#set-dark').addEventListener('change', () => {
+    const u = load(KEYS.ui, {}) || {};
+    u.dark = $('#set-dark').checked; save(KEYS.ui, u); applyDark(u.dark);
+  });
+
   $('#set-save').addEventListener('click', () => {
     state.settings = {
       user: $('#set-user').value.trim(),
@@ -103,6 +115,7 @@ function initSettings() {
     $('#diag-user').value = state.settings.user;
     $('#diag-rating').value = state.settings.rating;
     updateAiModelInfo();
+    updatePlanInfo();
     $('#set-saved').textContent = '保存しました';
     setTimeout(() => ($('#set-saved').textContent = ''), 2000);
   });
@@ -112,6 +125,7 @@ function initSettings() {
     state.settings.apiKey = '';
     save(KEYS.settings, state.settings);
     updateAiModelInfo();
+    updatePlanInfo();
     $('#set-saved').textContent = 'キーを消去しました';
     setTimeout(() => ($('#set-saved').textContent = ''), 2000);
   });
@@ -148,10 +162,12 @@ async function runDiagnose() {
   const btn = $('#diag-run'); btn.disabled = true; $('#diag-result').hidden = true;
   try {
     await ensureData();
-    const ac = await ensureAccepted(user, '#diag-status');
+    const data = await ensureUserData(user, '#diag-status');
+    const ac = data.acSet;
     const problems = await api.fetchProblems();
     const models = await api.fetchModels();
     const result = diagnose(ac, problems, models);
+    const rates = acRateByBand(ac, data.attempted, models);
 
     // 現在色：レーティング入力があれば優先、なければ推定。
     const ratedKey = bandKeyFromRating(ratingInput);
@@ -163,8 +179,19 @@ async function runDiagnose() {
     state.settings.rating = ratingInput;
     save(KEYS.settings, state.settings);
 
+    state.lastDiag = { currentKey, targetKey: target.key };
     renderDiagSummary({ currentKey, fromRating: !!ratedKey, result, ratingInput, target });
     renderDist(result.counts);
+    renderActivity(activity(data.firstAc));
+    renderAcRate(rates);
+    const dataRating = estimateRating(rates);
+    const stableKey = stableBandKey(rates);
+    $('#diag-acrate-note').textContent = dataRating !== null
+      ? `AC率からの実力レート目安 ≈ ${dataRating}（${(bandOf(dataRating) || {}).nameJa || '—'}）。`
+        + `${stableKey ? '安定して(80%+)解けている上限は ' + bandByKey(stableKey).nameJa + '帯。' : ''}`
+        + '下の「到達レート目安」に反映しました。'
+      : 'AC率の推定には各難易度帯で3問以上の挑戦が必要です。';
+    if (dataRating !== null) { $('#est-diff').value = dataRating; $('#est-prob').value = '0.5'; }
     $('#diag-note').textContent =
       `推定は「解いた問題の上位1割の難易度帯」を目安にしています。` +
       `目標の ${target.nameJa} に向けて、「問題」タブで未ACの問題を出せます。`;
@@ -214,6 +241,25 @@ function renderDist(counts) {
     ));
   }
 }
+function renderActivity(a) {
+  const box = $('#diag-activity'); box.replaceChildren();
+  const card = (k, v) => h('div', { class: 'card' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
+  box.append(card('総 AC 数', String(a.total)), card('今週の AC', String(a.week)), card('連続日数', `${a.streak} 日`));
+}
+function renderAcRate(rates) {
+  const box = $('#diag-acrate'); box.replaceChildren();
+  for (const c of COLORS) {
+    const s = rates[c.key];
+    if (!s || s.attempted === 0) continue;
+    const rate = s.solved / s.attempted;
+    box.append(h('div', { class: 'ar-row' },
+      h('div', { class: 'lbl', style: `color:${c.css}` }, c.nameJa),
+      h('div', { class: 'ar-bar' }, h('span', { style: `width:${Math.round(rate * 100)}%; background:${c.css}` })),
+      h('div', { class: 'n' }, `${s.solved}/${s.attempted}（${Math.round(rate * 100)}%）`),
+    ));
+  }
+  if (!box.children.length) box.append(h('p', { class: 'muted small' }, 'まだ挑戦データがありません。'));
+}
 
 // ---- 到達レート目安 ----
 // 難易度 D を確率 P で解ける人の内部レート目安（AtCoder と同じ Elo 型ロジスティック）。
@@ -259,6 +305,8 @@ function initEstimate() {
 function initRecommend() {
   $('#rec-run').addEventListener('click', runRecommend);
   $('#rec-godiag').addEventListener('click', () => gotoTab('diagnose'));
+  renderFavorites();
+  initMock();
 }
 async function runRecommend() {
   const user = (state.settings.user || $('#diag-user').value).trim();
@@ -267,13 +315,15 @@ async function runRecommend() {
     await ensureData();
     let ac = state.acSet;
     if (!ac) {
-      if (user) ac = await ensureAccepted(user, '#rec-status');
+      if (user) ac = (await ensureUserData(user, '#rec-status')).acSet;
       else { ac = new Set(); setStatus('#rec-status', 'ユーザー名未設定のため未AC判定なしで表示します（設定タブで登録推奨）。'); }
     }
     const problems = await api.fetchProblems();
     const models = await api.fetchModels();
+    const marks = load(KEYS.marks, {}) || {};
+    const exclude = new Set(Object.keys(marks));
     const list = recommend({
-      acSet: ac,
+      acSet: ac, exclude,
       problems, models,
       targetKey: $('#rec-target').value,
       abcOnly: $('#rec-abc').checked,
@@ -290,21 +340,64 @@ async function runRecommend() {
     btn.disabled = false;
   }
 }
+// 問題1件の表示（mode: 'rec' | 'fav' | 'mock'）。
+function problemItem(p, mode) {
+  const b = COLORS.find((c) => p.difficulty >= c.min && p.difficulty < c.max);
+  const favs = load(KEYS.favorites, {}) || {};
+  const actions = h('div', { class: 'pact' });
+
+  const favBtn = h('button', { class: 'iconbtn fav' + (favs[p.id] ? ' on' : '') }, favs[p.id] ? '★' : '☆');
+  favBtn.addEventListener('click', () => {
+    const f = load(KEYS.favorites, {}) || {};
+    if (f[p.id]) delete f[p.id];
+    else f[p.id] = { title: p.title || p.name, contest: p.contest_id, id: p.id, difficulty: p.difficulty };
+    save(KEYS.favorites, f);
+    favBtn.classList.toggle('on', !!f[p.id]);
+    favBtn.textContent = f[p.id] ? '★' : '☆';
+    renderFavorites();
+  });
+  const open = h('a', { class: 'open btn', href: problemUrl(p.contest_id, p.id), target: '_blank', rel: 'noopener' }, '問題へ');
+
+  if (mode === 'rec') {
+    const done = h('button', { class: 'iconbtn' }, '解いた');
+    done.addEventListener('click', () => markProblem(p.id, 'done'));
+    const skip = h('button', { class: 'iconbtn' }, '興味なし');
+    skip.addEventListener('click', () => markProblem(p.id, 'skip'));
+    actions.append(favBtn, done, skip, open);
+  } else {
+    actions.append(favBtn, open);
+  }
+
+  return h('div', { class: 'problem', 'data-pid': p.id },
+    h('span', { class: 'badge', style: `background:${b ? b.css : 'var(--c-none)'}` }, String(displayDifficulty(p.difficulty))),
+    h('div', { class: 'ptitle' }, p.title || p.name, h('div', { class: 'pmeta' }, p.contest_id.toUpperCase())),
+    actions,
+  );
+}
+function markProblem(pid, kind) {
+  const m = load(KEYS.marks, {}) || {};
+  m[pid] = kind; save(KEYS.marks, m);
+  document.querySelectorAll(`.problem[data-pid="${pid}"]`).forEach((el) => {
+    if (el.closest('#rec-list') || el.closest('#mock-list')) el.remove();
+  });
+}
 function renderProblems(list) {
   const box = $('#rec-list'); box.replaceChildren();
   if (!list.length) {
     box.append(h('p', { class: 'muted' }, '該当する未AC問題が見つかりませんでした。条件を変えてみてください。'));
     return;
   }
-  for (const p of list) {
-    const b = COLORS.find((c) => p.difficulty >= c.min && p.difficulty < c.max);
-    box.append(h('div', { class: 'problem' },
-      h('span', { class: 'badge', style: `background:${b ? b.css : 'var(--c-none)'}` }, String(displayDifficulty(p.difficulty))),
-      h('div', { class: 'ptitle' }, p.title || p.name,
-        h('div', { class: 'pmeta' }, `${p.contest_id.toUpperCase()}`)),
-      h('a', { class: 'open btn', href: problemUrl(p.contest_id, p.id), target: '_blank', rel: 'noopener' }, '問題へ'),
-    ));
-  }
+  list.forEach((p) => box.append(problemItem(p, 'rec')));
+}
+function renderFavorites() {
+  const box = $('#fav-list'); if (!box) return; box.replaceChildren();
+  const f = load(KEYS.favorites, {}) || {};
+  const ids = Object.keys(f);
+  if (!ids.length) { box.append(h('p', { class: 'muted small' }, 'お気に入りはまだありません。問題一覧の ☆ で追加できます。')); return; }
+  ids.forEach((id) => {
+    const v = f[id];
+    box.append(problemItem({ id, contest_id: v.contest, title: v.title, difficulty: v.difficulty }, 'fav'));
+  });
 }
 
 // ---- 発想 ----
@@ -479,8 +572,208 @@ function initRoadmap() {
   });
 }
 
+// ---- 模擬ABC ----
+let mockTimer = null;
+let mockRemain = 100 * 60;
+const fmtTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+function initMock() {
+  $('#mock-make').addEventListener('click', makeMock);
+  $('#mock-start').addEventListener('click', toggleMockTimer);
+  $('#mock-reset').addEventListener('click', resetMockTimer);
+}
+async function makeMock() {
+  const btn = $('#mock-make'); btn.disabled = true;
+  try {
+    await ensureData();
+    const problems = await api.fetchProblems();
+    const models = await api.fetchModels();
+    const ac = state.acSet || new Set();
+    const marks = load(KEYS.marks, {}) || {};
+    const targets = [100, 300, 500, 800, 1100, 1500];
+    const chosen = []; const used = new Set();
+    for (const t of targets) {
+      let best = null, bestGap = Infinity;
+      for (const p of problems) {
+        if (ac.has(p.id) || used.has(p.id) || marks[p.id]) continue;
+        if (!p.id.startsWith('abc')) continue;
+        const m = models[p.id];
+        const d = m && typeof m.difficulty === 'number' ? m.difficulty : null;
+        if (d === null) continue;
+        const gap = Math.abs(d - t);
+        if (gap < bestGap) { bestGap = gap; best = { ...p, difficulty: d }; }
+      }
+      if (best) { chosen.push(best); used.add(best.id); }
+    }
+    chosen.sort((a, b) => a.difficulty - b.difficulty);
+    const box = $('#mock-list'); box.replaceChildren();
+    if (!chosen.length) { box.append(h('p', { class: 'muted small' }, '対象問題が見つかりませんでした。')); return; }
+    chosen.forEach((p) => box.append(problemItem(p, 'mock')));
+    resetMockTimer();
+  } catch (err) {
+    $('#mock-list').replaceChildren(h('p', { class: 'status error' }, '失敗: ' + err.message));
+  } finally {
+    btn.disabled = false;
+  }
+}
+function toggleMockTimer() {
+  const el = $('#mock-timer');
+  if (mockTimer) {
+    clearInterval(mockTimer); mockTimer = null; el.classList.remove('run'); $('#mock-start').textContent = '再開';
+    return;
+  }
+  $('#mock-start').textContent = '一時停止'; el.classList.add('run'); el.classList.remove('over');
+  mockTimer = setInterval(() => {
+    mockRemain--;
+    el.textContent = fmtTime(Math.max(0, mockRemain));
+    if (mockRemain <= 0) {
+      clearInterval(mockTimer); mockTimer = null;
+      el.classList.remove('run'); el.classList.add('over'); $('#mock-start').textContent = '開始';
+    }
+  }, 1000);
+}
+function resetMockTimer() {
+  if (mockTimer) { clearInterval(mockTimer); mockTimer = null; }
+  mockRemain = 100 * 60;
+  const el = $('#mock-timer'); el.textContent = fmtTime(mockRemain); el.classList.remove('run', 'over');
+  $('#mock-start').textContent = '開始';
+}
+
+// ---- 復習・弱点マップ ----
+const SR_DAYS = [1, 3, 7, 14, 30]; // 間隔反復（日）
+const catName = (id) => { const c = CATEGORIES.find((x) => x.id === id); return c ? c.name : id; };
+
+function initReview() {
+  const cc = $('#rv-cats');
+  CATEGORIES.forEach((cat) => cc.append(h('label', {}, h('input', { type: 'checkbox', value: cat.id }), cat.name)));
+  $('#rv-add').addEventListener('click', addReview);
+  $('#plan-run').addEventListener('click', runPlan);
+  renderReview();
+  updatePlanInfo();
+}
+function addReview() {
+  const cats = [...document.querySelectorAll('#rv-cats input:checked')].map((c) => c.value);
+  const result = $('#rv-result').value;
+  const title = $('#rv-title').value.trim();
+  const url = $('#rv-url').value.trim();
+  const memo = $('#rv-memo').value.trim();
+  if (!title && !url && !cats.length && !memo) { $('#rv-saved').textContent = '何か入力してください'; return; }
+  const reviews = load(KEYS.reviews, []) || [];
+  const box = result === 'solved' ? 1 : 0;
+  reviews.push({ id: `${Date.now()}${Math.floor(Math.random() * 1000)}`, ts: Date.now(), title, url, result, cats, memo, box, due: Date.now() + SR_DAYS[box] * 86400000 });
+  save(KEYS.reviews, reviews);
+  $('#rv-title').value = ''; $('#rv-url').value = ''; $('#rv-memo').value = '';
+  document.querySelectorAll('#rv-cats input:checked').forEach((c) => { c.checked = false; });
+  $('#rv-saved').textContent = '記録しました';
+  setTimeout(() => ($('#rv-saved').textContent = ''), 1500);
+  renderReview();
+}
+function weaknessCounts() {
+  const reviews = load(KEYS.reviews, []) || [];
+  const counts = {};
+  for (const r of reviews) {
+    if (r.result === 'solved') continue;
+    for (const c of r.cats) counts[c] = (counts[c] || 0) + 1;
+  }
+  return counts;
+}
+function renderReview() { renderWeakmap(); renderDue(); renderLog(); }
+function renderWeakmap() {
+  const box = $('#weakmap'); box.replaceChildren();
+  const entries = Object.entries(weaknessCounts()).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) { box.append(h('p', { class: 'muted small' }, 'まだ弱点データがありません。「解けなかった/解説を見た」を記録すると、詰まりやすい発想が見えます。')); return; }
+  const max = entries[0][1];
+  for (const [cid, n] of entries) {
+    box.append(h('div', { class: 'weak-row' },
+      h('a', { class: 'wname', href: '#', onclick: (e) => { e.preventDefault(); gotoTab('ideas'); } }, catName(cid)),
+      h('div', { class: 'weak-bar' }, h('span', { style: `width:${(n / max) * 100}%` })),
+      h('div', { class: 'wn' }, String(n)),
+    ));
+  }
+}
+function reviewItem(r, dueMode) {
+  const label = { unsolved: '解けなかった', editorial: '解説を見た', solved: '解けた' }[r.result] || r.result;
+  const main = h('div', { class: 'rv-main' },
+    h('div', {}, r.url ? h('a', { href: r.url, target: '_blank', rel: 'noopener' }, r.title || r.url) : (r.title || '(無題)')),
+    h('div', { class: 'rv-meta' }, `${label}・${new Date(r.ts).toLocaleDateString()}${r.memo ? '・' + r.memo : ''}`),
+  );
+  if (r.cats && r.cats.length) {
+    const tags = h('div', {});
+    r.cats.forEach((c) => tags.append(h('span', { class: 'rv-tag' }, catName(c))));
+    main.append(tags);
+  }
+  const actions = h('div', { class: 'pact' });
+  if (dueMode) {
+    const done = h('button', { class: 'iconbtn' }, '復習した');
+    done.addEventListener('click', () => reviewAgain(r.id));
+    actions.append(done);
+  }
+  const del = h('button', { class: 'iconbtn' }, '削除');
+  del.addEventListener('click', () => deleteReview(r.id));
+  actions.append(del);
+  return h('div', { class: 'rv-item' }, main, actions);
+}
+function renderDue() {
+  const box = $('#review-due'); box.replaceChildren();
+  const now = Date.now();
+  const due = (load(KEYS.reviews, []) || []).filter((r) => r.result !== 'solved' && r.due <= now);
+  if (!due.length) { box.append(h('p', { class: 'muted small' }, '今日やる復習はありません。')); return; }
+  due.forEach((r) => box.append(reviewItem(r, true)));
+}
+function renderLog() {
+  const box = $('#review-log'); box.replaceChildren();
+  const reviews = (load(KEYS.reviews, []) || []).slice().sort((a, b) => b.ts - a.ts).slice(0, 30);
+  if (!reviews.length) { box.append(h('p', { class: 'muted small' }, 'まだ記録がありません。')); return; }
+  reviews.forEach((r) => box.append(reviewItem(r, false)));
+}
+function reviewAgain(id) {
+  const reviews = load(KEYS.reviews, []) || [];
+  const r = reviews.find((x) => x.id === id); if (!r) return;
+  r.box = Math.min((r.box || 0) + 1, SR_DAYS.length - 1);
+  r.due = Date.now() + SR_DAYS[r.box] * 86400000;
+  save(KEYS.reviews, reviews); renderReview();
+}
+function deleteReview(id) {
+  save(KEYS.reviews, (load(KEYS.reviews, []) || []).filter((x) => x.id !== id));
+  renderReview();
+}
+
+// ---- AI 学習プラン ----
+function updatePlanInfo() {
+  const m = MODELS.find((x) => x.id === (state.settings.model || DEFAULT_MODEL));
+  const el = $('#plan-info'); if (!el) return;
+  el.textContent = `モデル: ${m ? m.label : ''} / ${state.settings.apiKey ? 'キー設定済み' : 'キー未設定'}`;
+}
+async function runPlan() {
+  const btn = $('#plan-run'); btn.disabled = true;
+  $('#plan-result').replaceChildren(); setStatus('#plan-status', '学習プランを生成中…');
+  try {
+    const weakness = Object.entries(weaknessCounts()).sort((a, b) => b[1] - a[1]).slice(0, 5)
+      .map(([cid, n]) => ({ name: catName(cid), count: n }));
+    const curKey = (state.lastDiag && state.lastDiag.currentKey) || bandKeyFromRating(state.settings.rating);
+    const tgtKey = state.lastDiag && state.lastDiag.targetKey;
+    const text = await generateStudyPlan({
+      apiKey: state.settings.apiKey,
+      model: state.settings.model || DEFAULT_MODEL,
+      currentColor: curKey ? (bandByKey(curKey) || {}).nameJa : '',
+      targetColor: tgtKey ? (bandByKey(tgtKey) || {}).nameJa : '',
+      weakness,
+    });
+    $('#plan-result').replaceChildren(h('details', { class: 'ai-stage', open: '' },
+      h('summary', {}, '学習プラン'), h('div', { class: 'body' }, text)));
+    setStatus('#plan-status', null);
+  } catch (err) {
+    setStatus('#plan-status', err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---- ダークモード ----
+function applyDark(on) { document.body.classList.toggle('dark', !!on); }
+
 // ---- 起動 ----
 function main() {
+  applyDark((load(KEYS.ui, {}) || {}).dark); // 初期チラつき防止
   initTabs();
   initStart();
   initSettings();
@@ -488,6 +781,7 @@ function main() {
   initEstimate();
   initRecommend();
   initIdeas();
+  initReview();
   initRoadmap();
 }
 main();

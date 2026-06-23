@@ -29,4 +29,8 @@ export const KEYS = {
   settings: 'settings',   // { user, rating, apiKey, model }
   roadmap: 'roadmap',     // { [skillId]: true }
   start: 'start',         // { [stepId]: true }
+  reviews: 'reviews',     // [ { id, ts, title, url, result, cats:[], memo, box, due } ]
+  marks: 'marks',         // { [problemId]: 'done' | 'skip' }
+  favorites: 'favorites', // { [problemId]: { title, contest, url, difficulty } }
+  ui: 'ui',               // { dark: bool }
 };

@@ -9,15 +9,16 @@ const WINDOWS = {
   blue: [1100, 1700],
 };
 
-// opts: { acSet, problems, models, targetKey, abcOnly, includeHarder, count }
-export function recommend({ acSet, problems, models, targetKey, abcOnly = true, includeHarder = false, count = 20 }) {
+// opts: { acSet, exclude, problems, models, targetKey, abcOnly, includeHarder, count }
+export function recommend({ acSet, exclude, problems, models, targetKey, abcOnly = true, includeHarder = false, count = 20 }) {
   const win = WINDOWS[targetKey] || WINDOWS.green;
   const lo = win[0];
   const hi = win[1] + (includeHarder ? 300 : 0);
+  const skip = exclude || new Set();
 
   const out = [];
   for (const p of problems) {
-    if (acSet.has(p.id)) continue;
+    if (acSet.has(p.id) || skip.has(p.id)) continue;
     if (abcOnly && !p.id.startsWith('abc') && !p.contest_id.startsWith('abc')) continue;
     const m = models[p.id];
     const d = m && typeof m.difficulty === 'number' ? m.difficulty : null;

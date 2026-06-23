@@ -29,6 +29,7 @@
     <button class="tab" data-tab="diagnose">診断</button>
     <button class="tab" data-tab="recommend">問題</button>
     <button class="tab" data-tab="ideas">発想</button>
+    <button class="tab" data-tab="review">復習</button>
     <button class="tab" data-tab="roadmap">ロードマップ</button>
     <button class="tab" data-tab="settings">設定</button>
   </nav>
@@ -78,6 +79,14 @@
         <div class="cards" id="diag-summary"></div>
         <h3>解いた問題の難易度分布</h3>
         <div class="dist" id="diag-dist"></div>
+
+        <h3>精進ペース</h3>
+        <div class="cards" id="diag-activity"></div>
+
+        <h3>難易度帯ごとのAC率（実力の目安）</h3>
+        <div id="diag-acrate"></div>
+        <p class="muted small" id="diag-acrate-note"></p>
+
         <p class="muted small" id="diag-note"></p>
         <div id="diag-cta" class="diag-cta"></div>
       </div>
@@ -147,6 +156,19 @@
 
       <div id="rec-status" class="status" hidden></div>
       <div id="rec-list" class="problem-list"></div>
+
+      <h3>お気に入り</h3>
+      <div id="fav-list" class="problem-list"></div>
+
+      <h3>模擬ABC（タイマー付き）</h3>
+      <p class="muted small">未ACから難易度の異なる6問でセットを作り、本番形式（既定100分）で練習できます。</p>
+      <div class="row">
+        <button class="btn" id="mock-make">6問でセット作成</button>
+        <span class="mock-timer" id="mock-timer">100:00</span>
+        <button class="btn" id="mock-start">開始</button>
+        <button class="btn" id="mock-reset">リセット</button>
+      </div>
+      <div id="mock-list" class="problem-list"></div>
     </section>
 
     <!-- 発想補助 -->
@@ -188,6 +210,47 @@
       </div>
     </section>
 
+    <!-- 復習・弱点 -->
+    <section class="panel" id="panel-review">
+      <div class="panel-head">
+        <h2>復習・弱点マップ</h2>
+        <p class="muted">解けなかった問題と「抜けてた発想」を記録 → 弱点を見える化 → 復習を回す。改善の習慣ループの核です。</p>
+      </div>
+
+      <h3>つまずきを記録</h3>
+      <div class="review-form">
+        <div class="row">
+          <label class="field grow"><span>問題タイトル / メモ（任意）</span><input type="text" id="rv-title" placeholder="例: ABC300 D" /></label>
+          <label class="field grow"><span>URL（任意）</span><input type="text" id="rv-url" placeholder="https://atcoder.jp/..." /></label>
+          <label class="field"><span>結果</span>
+            <select id="rv-result">
+              <option value="unsolved">解けなかった</option>
+              <option value="editorial">解説を見た</option>
+              <option value="solved">解けた（記録）</option>
+            </select>
+          </label>
+        </div>
+        <div class="field"><span>抜けてた / 鍵だった発想（複数可）</span><div class="catchecks" id="rv-cats"></div></div>
+        <label class="field"><span>メモ（任意）</span><textarea id="rv-memo" rows="2" placeholder="どの発想が抜けてた？ 次に気をつけることは？"></textarea></label>
+        <div class="row"><button class="btn primary" id="rv-add">記録する</button><span class="muted small" id="rv-saved"></span></div>
+      </div>
+
+      <h3>弱点マップ</h3>
+      <div id="weakmap"></div>
+
+      <h3>復習キュー（今日やる）</h3>
+      <div id="review-due"></div>
+
+      <h3>AI 学習プラン</h3>
+      <p class="muted small">診断結果と弱点から、今週やることを提案します（要 API キー）。</p>
+      <div class="row"><button class="btn primary" id="plan-run">プランを生成</button><span class="muted small" id="plan-info"></span></div>
+      <div id="plan-status" class="status" hidden></div>
+      <div id="plan-result" class="ai-result"></div>
+
+      <h3>記録ログ</h3>
+      <div id="review-log"></div>
+    </section>
+
     <!-- ロードマップ -->
     <section class="panel" id="panel-roadmap">
       <div class="panel-head">
@@ -211,6 +274,11 @@
       <label class="field">
         <span>現在のレーティング（任意）</span>
         <input type="number" id="set-rating" />
+      </label>
+
+      <label class="field check" style="margin-top: 10px">
+        <input type="checkbox" id="set-dark" />
+        <span>ダークモード</span>
       </label>
 
       <hr />
