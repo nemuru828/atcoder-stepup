@@ -62,6 +62,23 @@ export function weeklyActivity(firstAc, weeks = 12) {
   return buckets.map((count, i) => ({ count, weeksAgo: weeks - 1 - i }));
 }
 
+// 直近 weeks 週の「合計AC（累積）」推移（古い→新しい順）。窓より前の AC も初期値に含める。
+export function cumulativeWeekly(firstAc, weeks = 26) {
+  const nowSec = Date.now() / 1000;
+  const per = new Array(weeks).fill(0);
+  let before = 0;
+  for (const epoch of firstAc.values()) {
+    const wi = Math.floor((nowSec - epoch) / 86400 / 7); // 0=今週
+    if (wi < 0) continue;
+    if (wi < weeks) per[weeks - 1 - wi]++;
+    else before++;
+  }
+  const pts = [];
+  let cum = before;
+  for (let i = 0; i < weeks; i++) { cum += per[i]; pts.push({ weeksAgo: weeks - 1 - i, cum }); }
+  return pts;
+}
+
 // 活動統計：firstAc(Map pid->epochSec) から 総AC・今週AC・連続日数。
 export function activity(firstAc) {
   const total = firstAc.size;

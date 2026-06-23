@@ -7,7 +7,7 @@ import { diagnose, bandKeyFromRating, targetFromCurrent } from './diagnose.js';
 import { recommend, windowOf } from './recommend.js';
 import { displayDifficulty } from './colors.js';
 import { generateHints, generateStudyPlan } from './ai.js';
-import { acRateByBand, estimateRating, stableBandKey, activity, weeklyActivity } from './stats.js';
+import { acRateByBand, estimateRating, stableBandKey, activity, weeklyActivity, cumulativeWeekly } from './stats.js';
 import { ROADMAP } from './data/roadmap.js';
 import { FRAMEWORK, CATEGORIES } from './data/categories.js';
 import { GET_STARTED } from './data/getstarted.js';
@@ -184,6 +184,7 @@ async function runDiagnose() {
     renderDist(result.counts);
     renderActivity(activity(data.firstAc));
     renderTrend(weeklyActivity(data.firstAc, 12));
+    renderCumulative(cumulativeWeekly(data.firstAc, 26));
     renderAcRate(rates);
     const dataRating = estimateRating(rates);
     const stableKey = stableBandKey(rates);
@@ -257,6 +258,22 @@ function renderTrend(weekly) {
       h('span', { style: `height:${(w.count / max) * 100}%` })));
   });
   box.append(h('div', { class: 'muted small' }, `直近 ${weekly.length} 週の解いた数（最大 ${max}/週・右端が今週）`), chart);
+}
+function renderCumulative(pts) {
+  const box = $('#diag-cumulative'); box.replaceChildren();
+  if (!pts.length) return;
+  const W = 600, H = 120, pad = 6, n = pts.length;
+  const maxCum = Math.max(1, pts[n - 1].cum);
+  const x = (i) => pad + (i / (n - 1)) * (W - 2 * pad);
+  const y = (v) => H - pad - (v / maxCum) * (H - 2 * pad);
+  const line = pts.map((p, i) => `${x(i).toFixed(1)},${y(p.cum).toFixed(1)}`).join(' ');
+  const area = `${pad.toFixed(1)},${(H - pad).toFixed(1)} ${line} ${(W - pad).toFixed(1)},${(H - pad).toFixed(1)}`;
+  box.append(h('div', { class: 'muted small' }, `合計AC の推移（直近 ${n} 週・現在 ${pts[n - 1].cum}）`));
+  box.insertAdjacentHTML('beforeend',
+    `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="cumsvg" role="img" aria-label="合計ACの折れ線">`
+    + `<polygon points="${area}" fill="var(--accent-soft)"></polygon>`
+    + `<polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"></polyline>`
+    + '</svg>');
 }
 function renderAcRate(rates) {
   const box = $('#diag-acrate'); box.replaceChildren();
@@ -593,6 +610,7 @@ let mockRemain = 100 * 60;
 const fmtTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 function initMock() {
   $('#mock-make').addEventListener('click', makeMock);
+  $('#mock-make-weak').addEventListener('click', makeMockWeak);
   $('#mock-start').addEventListener('click', toggleMockTimer);
   $('#mock-reset').addEventListener('click', resetMockTimer);
 }
@@ -629,6 +647,45 @@ async function makeMock() {
   } finally {
     btn.disabled = false;
   }
+}
+// 弱点カテゴリの検証済み例題からセットを作る。
+function makeMockWeak() {
+  const counts = weaknessCounts();
+  const weakCats = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([cid]) => cid);
+  if (!weakCats.length) { makeMock(); return; }
+  const ac = state.acSet || new Set();
+  const marks = load(KEYS.marks, {}) || {};
+  const candByCat = {};
+  for (const cid of weakCats) {
+    const cat = CATEGORIES.find((c) => c.id === cid);
+    candByCat[cid] = (cat?.practice || [])
+      .filter((p) => typeof p.diff === 'number' && p.url.includes('/tasks/'))
+      .map((p) => ({
+        id: p.url.split('/tasks/')[1],
+        contest_id: p.url.split('/contests/')[1].split('/')[0],
+        title: `${p.label}（${catName(cid)}）`,
+        difficulty: p.diff,
+      }))
+      .filter((p) => !ac.has(p.id) && !marks[p.id]);
+  }
+  const chosen = []; const used = new Set();
+  let added = true;
+  while (chosen.length < 6 && added) {
+    added = false;
+    for (const cid of weakCats) {
+      if (chosen.length >= 6) break;
+      const next = (candByCat[cid] || []).find((p) => !used.has(p.id));
+      if (next) { chosen.push(next); used.add(next.id); added = true; }
+    }
+  }
+  chosen.sort((a, b) => a.difficulty - b.difficulty);
+  const box = $('#mock-list'); box.replaceChildren();
+  if (!chosen.length) {
+    box.append(h('p', { class: 'muted small' }, '弱点カテゴリの未AC例題が見つかりませんでした。先に「復習」で弱点を記録してください。'));
+    return;
+  }
+  chosen.forEach((p) => box.append(problemItem(p, 'mock')));
+  resetMockTimer();
 }
 function toggleMockTimer() {
   const el = $('#mock-timer');
