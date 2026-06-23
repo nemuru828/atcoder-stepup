@@ -285,7 +285,9 @@ body.dark .badge { text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
 .catchecks label:hover { border-color: var(--accent); }
 
 /* 弱点マップ */
-.weak-row { display: grid; grid-template-columns: 130px 1fr 40px; align-items: center; gap: 10px; margin: 6px 0; }
+.weak-row { display: grid; grid-template-columns: 130px 1fr 40px auto; align-items: center; gap: 10px; margin: 6px 0; }
+.weak-practice { padding: 2px 0 10px 8px; border-left: 2px solid var(--line); margin: 0 0 8px 8px; }
+.weak-practice .practice { border-top: none; margin-top: 0; padding-top: 4px; }
 .weak-bar { height: 16px; border-radius: 6px; background: var(--line); overflow: hidden; }
 .weak-bar > span { display: block; height: 100%; background: var(--warn); border-radius: 6px; }
 .weak-row .wn { text-align: right; color: var(--ink-soft); font-size: .85rem; }
@@ -303,9 +305,14 @@ body.dark .badge { text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
 .mock-timer.run { color: var(--ok); border-color: var(--ok); }
 .mock-timer.over { color: var(--warn); border-color: var(--warn); }
 
+/* 精進トレンド（週次バー） */
+.trend { display: flex; align-items: flex-end; gap: 4px; height: 80px; margin: 6px 0 4px; }
+.trend-bar { flex: 1; height: 100%; background: var(--accent-soft); border-radius: 4px 4px 0 0; display: flex; align-items: flex-end; }
+.trend-bar > span { display: block; width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+
 @media (max-width: 560px) {
   .app-header, .tabs, main, .app-footer { padding-left: 14px; padding-right: 14px; }
   .dist-row { grid-template-columns: 52px 1fr 44px; }
   .ar-row { grid-template-columns: 48px 1fr 104px; }
-  .weak-row { grid-template-columns: 110px 1fr 34px; }
+  .weak-row { grid-template-columns: 96px 1fr 30px auto; }
 }

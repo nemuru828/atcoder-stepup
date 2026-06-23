@@ -7,7 +7,7 @@ import { diagnose, bandKeyFromRating, targetFromCurrent } from './diagnose.js';
 import { recommend, windowOf } from './recommend.js';
 import { displayDifficulty } from './colors.js';
 import { generateHints, generateStudyPlan } from './ai.js';
-import { acRateByBand, estimateRating, stableBandKey, activity } from './stats.js';
+import { acRateByBand, estimateRating, stableBandKey, activity, weeklyActivity } from './stats.js';
 import { ROADMAP } from './data/roadmap.js';
 import { FRAMEWORK, CATEGORIES } from './data/categories.js';
 import { GET_STARTED } from './data/getstarted.js';
@@ -183,6 +183,7 @@ async function runDiagnose() {
     renderDiagSummary({ currentKey, fromRating: !!ratedKey, result, ratingInput, target });
     renderDist(result.counts);
     renderActivity(activity(data.firstAc));
+    renderTrend(weeklyActivity(data.firstAc, 12));
     renderAcRate(rates);
     const dataRating = estimateRating(rates);
     const stableKey = stableBandKey(rates);
@@ -245,6 +246,17 @@ function renderActivity(a) {
   const box = $('#diag-activity'); box.replaceChildren();
   const card = (k, v) => h('div', { class: 'card' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
   box.append(card('総 AC 数', String(a.total)), card('今週の AC', String(a.week)), card('連続日数', `${a.streak} 日`));
+}
+function renderTrend(weekly) {
+  const box = $('#diag-trend'); box.replaceChildren();
+  const max = Math.max(1, ...weekly.map((w) => w.count));
+  const chart = h('div', { class: 'trend' });
+  weekly.forEach((w) => {
+    const label = w.weeksAgo === 0 ? '今週' : `${w.weeksAgo}週前`;
+    chart.append(h('div', { class: 'trend-bar', title: `${label}: ${w.count}問` },
+      h('span', { style: `height:${(w.count / max) * 100}%` })));
+  });
+  box.append(h('div', { class: 'muted small' }, `直近 ${weekly.length} 週の解いた数（最大 ${max}/週・右端が今週）`), chart);
 }
 function renderAcRate(rates) {
   const box = $('#diag-acrate'); box.replaceChildren();
@@ -400,6 +412,21 @@ function renderFavorites() {
   });
 }
 
+// カテゴリの練習リンク（例題は難易度バッジ付き）を生成。発想/弱点マップ共用。
+function practiceLinksEl(cat) {
+  const pr = h('div', { class: 'practice' }, h('div', { class: 'practice-label' }, '練習問題・問題集'));
+  (cat.practice || []).forEach((p) => {
+    const link = h('a', { class: 'plink', href: p.url, target: '_blank', rel: 'noopener' });
+    if (typeof p.diff === 'number') {
+      const b = bandOf(p.diff);
+      link.append(h('span', { class: 'pbadge', style: `background:${b ? b.css : 'var(--c-none)'}` }, String(displayDifficulty(p.diff))));
+    }
+    link.append(` ${p.label}`);
+    pr.append(link);
+  });
+  return pr;
+}
+
 // ---- 発想 ----
 function initIdeas() {
   // フレームワーク
@@ -413,19 +440,7 @@ function initIdeas() {
     cat.steps.forEach((s) => {
       steps.append(h('details', {}, h('summary', {}, s.q), h('p', {}, s.a)));
     });
-    if (cat.practice && cat.practice.length) {
-      const pr = h('div', { class: 'practice' }, h('div', { class: 'practice-label' }, '練習問題・問題集'));
-      cat.practice.forEach((p) => {
-        const link = h('a', { class: 'plink', href: p.url, target: '_blank', rel: 'noopener' });
-        if (typeof p.diff === 'number') {
-          const b = bandOf(p.diff);
-          link.append(h('span', { class: 'pbadge', style: `background:${b ? b.css : 'var(--c-none)'}` }, String(displayDifficulty(p.diff))));
-        }
-        link.append(` ${p.label}`);
-        pr.append(link);
-      });
-      steps.append(pr);
-    }
+    if (cat.practice && cat.practice.length) steps.append(practiceLinksEl(cat));
     grid.append(h('details', { class: 'cat' },
       h('summary', {}, h('span', {}, cat.name), h('span', { class: 'sig' }, cat.suspect)),
       steps,
@@ -683,11 +698,24 @@ function renderWeakmap() {
   if (!entries.length) { box.append(h('p', { class: 'muted small' }, 'まだ弱点データがありません。「解けなかった/解説を見た」を記録すると、詰まりやすい発想が見えます。')); return; }
   const max = entries[0][1];
   for (const [cid, n] of entries) {
-    box.append(h('div', { class: 'weak-row' },
-      h('a', { class: 'wname', href: '#', onclick: (e) => { e.preventDefault(); gotoTab('ideas'); } }, catName(cid)),
-      h('div', { class: 'weak-bar' }, h('span', { style: `width:${(n / max) * 100}%` })),
-      h('div', { class: 'wn' }, String(n)),
-    ));
+    const cat = CATEGORIES.find((c) => c.id === cid);
+    const panel = h('div', { class: 'weak-practice', hidden: '' });
+    const exBtn = h('button', { class: 'iconbtn' }, '例題');
+    exBtn.addEventListener('click', () => {
+      if (panel.hidden) {
+        if (!panel.children.length && cat) panel.append(practiceLinksEl(cat));
+        panel.hidden = false; exBtn.textContent = '閉じる';
+      } else { panel.hidden = true; exBtn.textContent = '例題'; }
+    });
+    box.append(
+      h('div', { class: 'weak-row' },
+        h('a', { class: 'wname', href: '#', onclick: (e) => { e.preventDefault(); gotoTab('ideas'); } }, catName(cid)),
+        h('div', { class: 'weak-bar' }, h('span', { style: `width:${(n / max) * 100}%` })),
+        h('div', { class: 'wn' }, String(n)),
+        exBtn,
+      ),
+      panel,
+    );
   }
 }
 function reviewItem(r, dueMode) {

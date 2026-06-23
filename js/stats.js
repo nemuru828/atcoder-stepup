@@ -49,6 +49,19 @@ export function stableBandKey(stat) {
   return key;
 }
 
+// 直近 weeks 週の「初AC 数」を週ごとに集計（古い→新しい順）。
+export function weeklyActivity(firstAc, weeks = 12) {
+  const buckets = new Array(weeks).fill(0);
+  const nowSec = Date.now() / 1000;
+  for (const epoch of firstAc.values()) {
+    const ageDays = (nowSec - epoch) / 86400;
+    if (ageDays < 0) continue;
+    const wi = Math.floor(ageDays / 7);
+    if (wi < weeks) buckets[weeks - 1 - wi]++;
+  }
+  return buckets.map((count, i) => ({ count, weeksAgo: weeks - 1 - i }));
+}
+
 // 活動統計：firstAc(Map pid->epochSec) から 総AC・今週AC・連続日数。
 export function activity(firstAc) {
   const total = firstAc.size;
